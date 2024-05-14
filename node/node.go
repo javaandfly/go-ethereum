@@ -78,8 +78,10 @@ const (
 func New(conf *Config) (*Node, error) {
 	// Copy config and resolve the datadir so future changes to the current
 	// working directory don't affect the node.
+	// 类似于一个深拷贝，为什么不用copy因为copy是slice特有的
 	confCopy := *conf
 	conf = &confCopy
+	//定义一个数据目录路径，如果不自定义那就默认取默认绝对路径下的文件
 	if conf.DataDir != "" {
 		absdatadir, err := filepath.Abs(conf.DataDir)
 		if err != nil {
@@ -87,12 +89,14 @@ func New(conf *Config) (*Node, error) {
 		}
 		conf.DataDir = absdatadir
 	}
+	//初始化一个log
 	if conf.Logger == nil {
 		conf.Logger = log.New()
 	}
 
 	// Ensure that the instance name doesn't cause weird conflicts with
 	// other files in the data directory.
+	//确认某些配置中不会出现奇怪的符号
 	if strings.ContainsAny(conf.Name, `/\`) {
 		return nil, errors.New(`Config.Name must not contain '/' or '\'`)
 	}
@@ -102,8 +106,11 @@ func New(conf *Config) (*Node, error) {
 	if strings.HasSuffix(conf.Name, ".ipc") {
 		return nil, errors.New(`Config.Name cannot end in ".ipc"`)
 	}
+	//新增一个rpc的对象，内置一些配置
 	server := rpc.NewServer()
+	//设置批量请求情况下的限制
 	server.SetBatchLimits(conf.BatchRequestLimit, conf.BatchResponseMaxSize)
+	//设置一个节点基础配置
 	node := &Node{
 		config:        conf,
 		inprocHandler: server,
@@ -115,12 +122,16 @@ func New(conf *Config) (*Node, error) {
 	}
 
 	// Register built-in APIs.
+	//注册一些api
 	node.rpcAPIs = append(node.rpcAPIs, node.apis()...)
 
 	// Acquire the instance directory lock.
+	//新增一个目录 但是意义不明，我觉得有可能为了存放某些文件，解决权限不过的问题
 	if err := node.openDataDir(); err != nil {
 		return nil, err
 	}
+	//创建秘钥目录 并set进去 不是很清晰是为了什么
+	//猜测有可能是因为存minter的私钥吗？
 	keyDir, isEphem, err := conf.GetKeyStoreDir()
 	if err != nil {
 		return nil, err
@@ -129,9 +140,11 @@ func New(conf *Config) (*Node, error) {
 	node.keyDirTemp = isEphem
 	// Creates an empty AccountManager with no backends. Callers (e.g. cmd/geth)
 	// are required to add the backends later on.
+	//创建一个后端用来签署交易，我理解的目前只是一个钱包吗？
 	node.accman = accounts.NewManager(&accounts.Config{InsecureUnlockAllowed: conf.InsecureUnlockAllowed})
 
 	// Initialize the p2p server. This creates the node key and discovery databases.
+	//初始化p2p的server
 	node.server.Config.PrivateKey = node.config.NodeKey()
 	node.server.Config.Name = node.config.NodeName()
 	node.server.Config.Logger = node.log

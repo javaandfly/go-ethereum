@@ -341,12 +341,15 @@ func prepare(ctx *cli.Context) {
 // geth is the main entry point into the system if no special subcommand is run.
 // It creates a default node based on the command line arguments and runs it in
 // blocking mode, waiting for it to be shut down.
+
+// 以太坊节点启动实际入口
 func geth(ctx *cli.Context) error {
 	if args := ctx.Args().Slice(); len(args) > 0 {
 		return fmt.Errorf("invalid command: %q", args[0])
 	}
-
+	//注册一些指标，然后准备启动的一些参数，打印一些启动信息
 	prepare(ctx)
+	//真正启动一个重节点
 	stack := makeFullNode(ctx)
 	defer stack.Close()
 
