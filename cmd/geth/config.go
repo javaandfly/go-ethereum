@@ -150,19 +150,22 @@ func loadBaseConfig(ctx *cli.Context) gethConfig {
 func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	//根据给定的命令行参数和配置文件加载
 	cfg := loadBaseConfig(ctx)
+	//构造一个节点
 	stack, err := node.New(&cfg.Node)
 	if err != nil {
 		utils.Fatalf("Failed to create the protocol stack: %v", err)
 	}
 	// Node doesn't by default populate account manager backends
+	// 构造一个节点的时候后端账户没有set 这里set进去
 	if err := setAccountManagerBackends(stack.Config(), stack.AccountManager(), stack.KeyStoreDir()); err != nil {
 		utils.Fatalf("Failed to set account manager backends: %v", err)
 	}
-
+	//set eth的配置 根据stack配置 如果存在就替换 不存在就默认
 	utils.SetEthConfig(ctx, stack, &cfg.Eth)
 	if ctx.IsSet(utils.EthStatsURLFlag.Name) {
 		cfg.Ethstats.URL = ctx.String(utils.EthStatsURLFlag.Name)
 	}
+	//set指标的信息
 	applyMetricConfig(ctx, &cfg)
 
 	return stack, cfg
@@ -180,7 +183,7 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 		v := ctx.Uint64(utils.OverrideVerkle.Name)
 		cfg.Eth.OverrideVerkle = &v
 	}
-
+	//重点 实际运行的ETH服务
 	backend, eth := utils.RegisterEthService(stack, &cfg.Eth)
 
 	// Create gauge with geth system and build information
@@ -354,7 +357,10 @@ func setAccountManagerBackends(conf *node.Config, am *accounts.Manager, keydir s
 	// If/when we implement some form of lockfile for USB and keystore wallets,
 	// we can have both, but it's very confusing for the user to see the same
 	// accounts in both externally and locally, plus very racey.
+	//将minter的keystore set进这个账户模型accouts里面
 	am.AddBackend(keystore.NewKeyStore(keydir, scryptN, scryptP))
+
+	// 硬件钱包 先不考虑深究
 	if conf.USB {
 		// Start a USB hub for Ledger hardware wallets
 		if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {

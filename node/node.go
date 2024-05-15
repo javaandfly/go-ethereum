@@ -154,6 +154,7 @@ func New(conf *Config) (*Node, error) {
 	}
 
 	// Check HTTP/WS prefixes are valid.
+	// 检查配置的前缀包括http和webSocket
 	if err := validatePrefix("HTTP", conf.HTTPPathPrefix); err != nil {
 		return nil, err
 	}
@@ -162,8 +163,10 @@ func New(conf *Config) (*Node, error) {
 	}
 
 	// Configure RPC servers.
+	//构造节点中服务器的对象 HTTP
 	node.http = newHTTPServer(node.log, conf.HTTPTimeouts)
 	node.httpAuth = newHTTPServer(node.log, conf.HTTPTimeouts)
+	//构造节点中服务器的对象 wS
 	node.ws = newHTTPServer(node.log, rpc.DefaultHTTPTimeouts)
 	node.wsAuth = newHTTPServer(node.log, rpc.DefaultHTTPTimeouts)
 	node.ipc = newIPCServer(node.log, conf.IPCEndpoint())
