@@ -370,14 +370,17 @@ func LoadChainConfig(db ethdb.Database, genesis *Genesis) (*params.ChainConfig, 
 	// Load the stored chain config from the database. It can be nil
 	// in case the database is empty. Notably, we only care about the
 	// chain config corresponds to the canonical chain.
+	//查询规范链的hash
 	stored := rawdb.ReadCanonicalHash(db, 0)
 	if stored != (common.Hash{}) {
+		//检索共识机制？ 知识查询一个默认链配置 应该是加载默认的
 		storedcfg := rawdb.ReadChainConfig(db, stored)
 		if storedcfg != nil {
 			return storedcfg, nil
 		}
 	}
 	// Load the config from the provided genesis specification
+	//从提供的创世区块加载默认配置
 	if genesis != nil {
 		// Reject invalid genesis spec without valid chain config
 		if genesis.Config == nil {
@@ -387,6 +390,7 @@ func LoadChainConfig(db ethdb.Database, genesis *Genesis) (*params.ChainConfig, 
 		// config is missing(initialize the empty leveldb with an
 		// external ancient chain segment), ensure the provided genesis
 		// is matched.
+		//如果存在规范的创世hash 并且和创世规范hash不同 那么就以创世hash为主
 		if stored != (common.Hash{}) && genesis.ToBlock().Hash() != stored {
 			return nil, &GenesisMismatchError{stored, genesis.ToBlock().Hash()}
 		}
@@ -394,6 +398,7 @@ func LoadChainConfig(db ethdb.Database, genesis *Genesis) (*params.ChainConfig, 
 	}
 	// There is no stored chain config and no new config provided,
 	// In this case the default chain config(mainnet) will be used
+	//如果不符合上述条件 使用默认配置
 	return params.MainnetChainConfig, nil
 }
 

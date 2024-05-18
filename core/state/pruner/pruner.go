@@ -341,6 +341,7 @@ func (p *Pruner) Prune(root common.Hash) error {
 // pruning **has to be resumed**. Otherwise a lot of dangling nodes may be left
 // in the disk.
 func RecoverPruning(datadir string, db ethdb.Database) error {
+	//根据路径下的所有文件 找到布隆过滤器的文件
 	stateBloomPath, stateBloomRoot, err := findBloomFilter(datadir)
 	if err != nil {
 		return err
@@ -477,6 +478,7 @@ func findBloomFilter(datadir string) (string, common.Hash, error) {
 		stateBloomPath string
 		stateBloomRoot common.Hash
 	)
+	//根据路径中 执行传入的函数  我理解的是找到路径后将路径和hash拼接后返回
 	if err := filepath.Walk(datadir, func(path string, info os.FileInfo, err error) error {
 		if info != nil && !info.IsDir() {
 			ok, root := isBloomFilter(path)

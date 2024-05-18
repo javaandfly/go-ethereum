@@ -136,19 +136,23 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 检查指定的状态方案是否与存储的状态兼容 不是很懂
+	// 检查指定的状态方案是否与存储的状态兼容 两种同步方式hash 路径 裁剪
 	scheme, err := rawdb.ParseStateScheme(config.StateScheme, chainDb)
 	if err != nil {
 		return nil, err
 	}
 	// Try to recover offline state pruning only in hash-based.
-	//
+	//如果为hash裁剪
 	if scheme == rawdb.HashScheme {
+		//如果进行hash拆建 就必须要保持不中断 如果启动了布隆过滤器 就一定要恢复剪枝
 		if err := pruner.RecoverPruning(stack.ResolvePath(""), chainDb); err != nil {
 			log.Error("Failed to recover state", "error", err)
 		}
 	}
 	// Transfer mining-related config to the ethash config.
+	//配置出快相关的配置
+
+	//如果数据库已经初始化 就加载链的配置 如果未加载 就提供原始配置
 	chainConfig, err := core.LoadChainConfig(chainDb, config.Genesis)
 	if err != nil {
 		return nil, err
