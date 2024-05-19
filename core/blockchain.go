@@ -266,15 +266,21 @@ type BlockChain struct {
 // available in the database. It initialises the default Ethereum Validator
 // and Processor.
 func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis, overrides *ChainOverrides, engine consensus.Engine, vmConfig vm.Config, shouldPreserve func(header *types.Header) bool, txLookupLimit *uint64) (*BlockChain, error) {
+	//如果缓存配置不存在 就使用默认的 如果从主入口进来的话 其实不需要这个判断，因为已经被构造了 注意哈
 	if cacheConfig == nil {
 		cacheConfig = defaultCacheConfig
 	}
 	// Open trie database with provided config
+
+	//打开并初始化 trie数据库
 	triedb := triedb.NewDatabase(db, cacheConfig.triedbConfig(genesis != nil && genesis.IsVerkle()))
 
 	// Setup the genesis block, commit the provided genesis specification
 	// to database if the genesis block is not present yet, or load the
 	// stored one from database.
+	//接下来就是先检查创世区块
+	//1: 假如说存在创世区块，说明是第二次启动节点对吧 就比如宕机后 重启
+	//2: 假如不存在创世区块，就要根据配置判断是否需要重写创世区块 还是按照默认的创世区块（也就是普通的以太坊）
 	chainConfig, genesisHash, genesisErr := SetupGenesisBlockWithOverride(db, triedb, genesis, overrides)
 	if _, ok := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !ok {
 		return nil, genesisErr

@@ -7,6 +7,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/tracing"
 )
 
+//感觉是一个钩子函数的集合，通过注册的方式注入
+
 type ctorFunc func(config json.RawMessage) (*tracing.Hooks, error)
 
 // LiveDirectory is the collection of tracers which can be used

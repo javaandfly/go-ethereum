@@ -157,14 +157,17 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
+	//初始化共识引擎
 	engine, err := ethconfig.CreateConsensusEngine(chainConfig, chainDb)
 	if err != nil {
 		return nil, err
 	}
+	//设置网络chainid eth目前evm网络中的id为1
 	networkID := config.NetworkId
 	if networkID == 0 {
 		networkID = chainConfig.ChainID.Uint64()
 	}
+	//构造一个eth的结构
 	eth := &Ethereum{
 		config:            config,
 		chainDb:           chainDb,
@@ -179,13 +182,15 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		p2pServer:         stack.Server(),
 		shutdownTracker:   shutdowncheck.NewShutdownTracker(chainDb),
 	}
+	//查询当前存储的db的版本
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
 	var dbVer = "<nil>"
+	//如果存在版本保存版本号
 	if bcVersion != nil {
 		dbVer = fmt.Sprintf("%d", *bcVersion)
 	}
 	log.Info("Initialising Ethereum protocol", "network", networkID, "dbversion", dbVer)
-
+	//如果不跳过数据库版本检查 就根据规则检查版本
 	if !config.SkipBcVersionCheck {
 		if bcVersion != nil && *bcVersion > core.BlockChainVersion {
 			return nil, fmt.Errorf("database version is v%d, Geth %s only supports v%d", *bcVersion, params.VersionWithMeta, core.BlockChainVersion)
@@ -196,6 +201,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			rawdb.WriteDatabaseVersion(chainDb, core.BlockChainVersion)
 		}
 	}
+	//构建cache配置
 	var (
 		vmConfig = vm.Config{
 			EnablePreimageRecording: config.EnablePreimageRecording,
@@ -212,19 +218,25 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			StateScheme:         scheme,
 		}
 	)
+	//如果开启evm跟踪？
 	if config.VMTrace != "" {
 		var traceConfig json.RawMessage
 		if config.VMTraceConfig != "" {
 			traceConfig = json.RawMessage(config.VMTraceConfig)
 		}
+		//注入evm跟踪器
 		t, err := tracers.LiveDirectory.New(config.VMTrace, traceConfig)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to create tracer %s: %v", config.VMTrace, err)
 		}
+		//在vm配置中加入追踪hook函数
 		vmConfig.Tracer = t
 	}
 	// Override the chain config with provided settings.
+	//如果存在某些配置 就cp出来
 	var overrides core.ChainOverrides
+
+	//目前为止的两个配置 分叉后删除？ 目前意义不明
 	if config.OverrideCancun != nil {
 		overrides.OverrideCancun = config.OverrideCancun
 	}
@@ -232,9 +244,11 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		overrides.OverrideVerkle = config.OverrideVerkle
 	}
 	// TODO (MariusVanDerWijden) get rid of shouldPreserve in a follow-up PR
+	//后续删除？ 定义一个函数默认返回false 😄离谱
 	shouldPreserve := func(header *types.Header) bool {
 		return false
 	}
+	//构造一个区块链 核心逻辑
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, shouldPreserve, &config.TransactionHistory)
 	if err != nil {
 		return nil, err

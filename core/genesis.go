@@ -266,9 +266,11 @@ func SetupGenesisBlock(db ethdb.Database, triedb *triedb.Database, genesis *Gene
 }
 
 func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, genesis *Genesis, overrides *ChainOverrides) (*params.ChainConfig, common.Hash, error) {
+	//假如说传入的创世区块和配置都为nil 那就直接返回吧 简称没有配置玩毛
 	if genesis != nil && genesis.Config == nil {
 		return params.AllEthashProtocolChanges, common.Hash{}, errGenesisNoConfig
 	}
+	//定义一个配置覆盖的函数，如果从入口进来的话 也能看到这两个配置 目前意义不明
 	applyOverrides := func(config *params.ChainConfig) {
 		if config != nil {
 			if overrides != nil && overrides.OverrideCancun != nil {
@@ -280,15 +282,18 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 		}
 	}
 	// Just commit the new block if there is no stored genesis block.
+	//先查询db中是否存在创世区块
 	stored := rawdb.ReadCanonicalHash(db, 0)
+	//不存在创世区块
 	if (stored == common.Hash{}) {
+		//如果传入的创世区块没有设置 说明还是走eth 就使用默认的
 		if genesis == nil {
 			log.Info("Writing default main-net genesis block")
 			genesis = DefaultGenesisBlock()
 		} else {
 			log.Info("Writing custom genesis block")
 		}
-
+		//然后覆盖创世中的一些配置
 		applyOverrides(genesis.Config)
 		block, err := genesis.Commit(db, triedb)
 		if err != nil {
@@ -300,6 +305,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 	// state database is not initialized yet. It can happen that the node
 	// is initialized with an external ancient store. Commit genesis state
 	// in this case.
+	// 创世区块已经存储 根据hash查询创世区块的头
 	header := rawdb.ReadHeader(db, stored, 0)
 	if header.Root != types.EmptyRootHash && !triedb.Initialized(header.Root) {
 		if genesis == nil {

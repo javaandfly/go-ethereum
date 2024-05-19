@@ -171,12 +171,15 @@ type Config struct {
 func CreateConsensusEngine(config *params.ChainConfig, db ethdb.Database) (consensus.Engine, error) {
 	// Geth v1.14.0 dropped support for non-merged networks in any consensus
 	// mode. If such a network is requested, reject startup.
+	//默认不支持pow 想使用老的pow算法 应采用更早的版本
 	if !config.TerminalTotalDifficultyPassed {
 		return nil, errors.New("only PoS networks are supported, please transition old ones with Geth v1.13.x")
 	}
 	// Wrap previously supported consensus engines into their post-merge counterpart
+	//创建一个权益证明的共识引擎
 	if config.Clique != nil {
 		return beacon.New(clique.New(config.Clique, db)), nil
 	}
+	//创建一个伪造的pow共识引擎
 	return beacon.New(ethash.NewFaker()), nil
 }
