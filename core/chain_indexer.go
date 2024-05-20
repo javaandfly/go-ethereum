@@ -149,7 +149,7 @@ func (c *ChainIndexer) AddCheckpoint(section uint64, shead common.Hash) {
 func (c *ChainIndexer) Start(chain ChainIndexerChain) {
 	events := make(chan ChainHeadEvent, 10)
 	sub := chain.SubscribeChainHeadEvent(events)
-
+	// 监听事件
 	go c.eventLoop(chain.CurrentHeader(), events, sub)
 }
 
@@ -202,6 +202,7 @@ func (c *ChainIndexer) eventLoop(currentHeader *types.Header, events chan ChainH
 	defer sub.Unsubscribe()
 
 	// Fire the initial new head event to start any outstanding processing
+	//初始化链头数据
 	c.newHead(currentHeader.Number.Uint64(), false)
 
 	var (
@@ -222,7 +223,9 @@ func (c *ChainIndexer) eventLoop(currentHeader *types.Header, events chan ChainH
 				errc <- nil
 				return
 			}
+			//收到事件
 			header := ev.Block.Header()
+			//不是最新的hash 跟父hash不同说明当前不在同一个高度
 			if header.ParentHash != prevHash {
 				// Reorg to the common ancestor if needed (might not exist in light sync mode, skip reorg then)
 				// TODO(karalabe, zsfelfoldi): This seems a bit brittle, can we detect this case explicitly?
@@ -233,8 +236,9 @@ func (c *ChainIndexer) eventLoop(currentHeader *types.Header, events chan ChainH
 					}
 				}
 			}
-			c.newHead(header.Number.Uint64(), false)
 
+			c.newHead(header.Number.Uint64(), false)
+			//更新当前hash 和 header
 			prevHeader, prevHash = header, header.Hash()
 		}
 	}
@@ -246,6 +250,7 @@ func (c *ChainIndexer) newHead(head uint64, reorg bool) {
 	defer c.lock.Unlock()
 
 	// If a reorg happened, invalidate all sections until that point
+	//如果发生重组 则使之前的点无效 目前不存在 从启动来看传递的都是false
 	if reorg {
 		// Revert the known section number to the reorg point
 		known := (head + 1) / c.sectionSize
@@ -276,6 +281,7 @@ func (c *ChainIndexer) newHead(head uint64, reorg bool) {
 	}
 	// No reorg, calculate the number of newly known sections and update if high enough
 	var sections uint64
+	// 没有重组，计算新已知部分的数量，如果足够高则更新
 	if head >= c.confirmsReq {
 		sections = (head + 1 - c.confirmsReq) / c.sectionSize
 		if sections < c.checkpointSections {

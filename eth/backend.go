@@ -253,23 +253,27 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
+	//开启块事件监听
 	eth.bloomIndexer.Start(eth.blockchain)
 
+	//新增blob交易池 这个是为了兼容layer2 坎昆升级后出现的
 	if config.BlobPool.Datadir != "" {
 		config.BlobPool.Datadir = stack.ResolvePath(config.BlobPool.Datadir)
 	}
 	blobPool := blobpool.New(config.BlobPool, eth.blockchain)
 
+	//正常的交易池
 	if config.TxPool.Journal != "" {
 		config.TxPool.Journal = stack.ResolvePath(config.TxPool.Journal)
 	}
 	legacyPool := legacypool.New(config.TxPool, eth.blockchain)
-
+	// 新增交易池初始化 传入blob交易池 和 遗留交易池
 	eth.txPool, err = txpool.New(config.TxPool.PriceLimit, eth.blockchain, []txpool.SubPool{legacyPool, blobPool})
 	if err != nil {
 		return nil, err
 	}
 	// Permit the downloader to use the trie cache allowance during fast sync
+	//
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit + cacheConfig.SnapshotLimit
 	if eth.handler, err = newHandler(&handlerConfig{
 		NodeID:         eth.p2pServer.Self().ID(),
