@@ -295,6 +295,8 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 		}
 		//然后覆盖创世中的一些配置
 		applyOverrides(genesis.Config)
+
+		//持久化创世区块
 		block, err := genesis.Commit(db, triedb)
 		if err != nil {
 			return genesis.Config, common.Hash{}, err
@@ -307,16 +309,22 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 	// in this case.
 	// 创世区块已经存储 根据hash查询创世区块的头
 	header := rawdb.ReadHeader(db, stored, 0)
+	//如果db中默认hash头不等于默认hash 并且treddb未初始化
 	if header.Root != types.EmptyRootHash && !triedb.Initialized(header.Root) {
+		//如果传入的创世区块没有设置 说明还是走eth 就使用默认的
 		if genesis == nil {
 			genesis = DefaultGenesisBlock()
 		}
+		//然后覆盖创世配置中的一些配置
 		applyOverrides(genesis.Config)
 		// Ensure the stored genesis matches with the given one.
+		//拿出现存创世区块的hash
 		hash := genesis.ToBlock().Hash()
+		//健壮性 这里的hash一定等于查出来的hash
 		if hash != stored {
 			return genesis.Config, hash, &GenesisMismatchError{stored, hash}
 		}
+		//持久化创世区块
 		block, err := genesis.Commit(db, triedb)
 		if err != nil {
 			return genesis.Config, hash, err
@@ -324,7 +332,9 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 		return genesis.Config, block.Hash(), nil
 	}
 	// Check whether the genesis block is already written.
+	// 如果传入的创世区块数据结构存在 保证创世区块跟数据库中查出的创世区块相同
 	if genesis != nil {
+		//覆盖配置
 		applyOverrides(genesis.Config)
 		hash := genesis.ToBlock().Hash()
 		if hash != stored {
@@ -332,12 +342,17 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 		}
 	}
 	// Get the existing chain configuration.
+	//获取当前hash对应的默认配置 包括主网  Holesky Sepolia Goerli
 	newcfg := genesis.configOrDefault(stored)
+	//覆盖配置
 	applyOverrides(newcfg)
+	// 确保当前配置没有跳过任何的分叉 就是说保证兼容了所有之前的升级
 	if err := newcfg.CheckConfigForkOrder(); err != nil {
 		return newcfg, common.Hash{}, err
 	}
+	// 获取db中创世hash对应的所有块配置
 	storedcfg := rawdb.ReadChainConfig(db, stored)
+	// 如果不存在 按照现有的配置写入
 	if storedcfg == nil {
 		log.Warn("Found genesis block without chain config")
 		rawdb.WriteChainConfig(db, stored, newcfg)
@@ -349,12 +364,19 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 	// chain config as that would be AllProtocolChanges (applying any new fork
 	// on top of an existing private network genesis block). In that case, only
 	// apply the overrides.
+	//特殊情况：如果正在使用私有网络（数据库中没有创世，也没有
+	// 主网哈希），我们不能应用 `configOrDefault`
+	// 链配置，因为那将是 AllProtocolChanges（在现有私有网络创世区块之上应用任何新分叉）。在这种情况下，仅
+	// 应用覆盖。
 	if genesis == nil && stored != params.MainnetGenesisHash {
 		newcfg = storedcfg
 		applyOverrides(newcfg)
 	}
 	// Check config compatibility and write the config. Compatibility errors
 	// are returned to the caller unless we're already at block zero.
+
+	//检查配置兼容性并写入配置。兼容性错误
+	//除非我们已经处于块零，否则将返回给调用者。
 	head := rawdb.ReadHeadHeader(db)
 	if head == nil {
 		return newcfg, stored, errors.New("missing head header")

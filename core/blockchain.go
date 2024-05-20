@@ -285,6 +285,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	if _, ok := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !ok {
 		return nil, genesisErr
 	}
+	//拼接一个string 打印出来
 	log.Info("")
 	log.Info(strings.Repeat("-", 153))
 	for _, line := range strings.Split(chainConfig.Description(), "\n") {
@@ -293,62 +294,72 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	log.Info(strings.Repeat("-", 153))
 	log.Info("")
 
+	//构造一个BlockChain对象
 	bc := &BlockChain{
-		chainConfig:   chainConfig,
-		cacheConfig:   cacheConfig,
-		db:            db,
-		triedb:        triedb,
-		triegc:        prque.New[int64, common.Hash](nil),
-		quit:          make(chan struct{}),
-		chainmu:       syncx.NewClosableMutex(),
+		chainConfig:   chainConfig,                        //链配置
+		cacheConfig:   cacheConfig,                        //缓存配置
+		db:            db,                                 //db
+		triedb:        triedb,                             //trie树
+		triegc:        prque.New[int64, common.Hash](nil), // 优先级队列将块号映射到尝试进行 GC ??
+		quit:          make(chan struct{}),                //退出通知
+		chainmu:       syncx.NewClosableMutex(),           //新增一个同步锁
 		bodyCache:     lru.NewCache[common.Hash, *types.Body](bodyCacheLimit),
 		bodyRLPCache:  lru.NewCache[common.Hash, rlp.RawValue](bodyCacheLimit),
 		receiptsCache: lru.NewCache[common.Hash, []*types.Receipt](receiptsCacheLimit),
 		blockCache:    lru.NewCache[common.Hash, *types.Block](blockCacheLimit),
 		txLookupCache: lru.NewCache[common.Hash, txLookup](txLookupCacheLimit),
-		engine:        engine,
-		vmConfig:      vmConfig,
-		logger:        vmConfig.Tracer,
+		engine:        engine,          //共识引擎
+		vmConfig:      vmConfig,        //evm config
+		logger:        vmConfig.Tracer, //evm追踪器
 	}
-	bc.flushInterval.Store(int64(cacheConfig.TrieTimeLimit))
-	bc.forker = NewForkChoice(bc, shouldPreserve)
-	bc.stateCache = state.NewDatabaseWithNodeDB(bc.db, bc.triedb)
-	bc.validator = NewBlockValidator(chainConfig, bc, engine)
+	bc.flushInterval.Store(int64(cacheConfig.TrieTimeLimit))      //原子性的set 限制
+	bc.forker = NewForkChoice(bc, shouldPreserve)                 //未知
+	bc.stateCache = state.NewDatabaseWithNodeDB(bc.db, bc.triedb) //根据trie数据库创建状态数据库
+	bc.validator = NewBlockValidator(chainConfig, bc, engine)     //新增一个区块验证者
 	bc.prefetcher = newStatePrefetcher(chainConfig, bc, engine)
 	bc.processor = NewStateProcessor(chainConfig, bc, engine)
 
 	var err error
+	//创建一个链头结构 本身不可用？ set进BlockChain
 	bc.hc, err = NewHeaderChain(db, chainConfig, engine, bc.insertStopped)
 	if err != nil {
 		return nil, err
 	}
+	// 获取创世区块 set进bc 上面我们已经对创世区块进行了初始化了
 	bc.genesisBlock = bc.GetBlockByNumber(0)
 	if bc.genesisBlock == nil {
 		return nil, ErrNoGenesis
 	}
 
+	// set一群nil？？？
 	bc.currentBlock.Store(nil)
 	bc.currentSnapBlock.Store(nil)
 	bc.currentFinalBlock.Store(nil)
 	bc.currentSafeBlock.Store(nil)
 
 	// Update chain info data metrics
+	//更新链的chainid
 	chainInfoGauge.Update(metrics.GaugeInfoValue{"chain_id": bc.chainConfig.ChainID.String()})
 
 	// If Geth is initialized with an external ancient store, re-initialize the
 	// missing chain indexes and chain flags. This procedure can survive crash
 	// and can be resumed in next restart since chain flags are updated in last step.
+	//一种检查如果是二次进入 就是使用是老链的话 就重新载入数据库
 	if bc.empty() {
 		rawdb.InitDatabaseFromFreezer(bc.db)
 	}
 	// Load blockchain states from disk
+	// 从数据库加载最后已知的链状态
 	if err := bc.loadLastState(); err != nil {
 		return nil, err
 	}
 	// Make sure the state associated with the block is available, or log out
 	// if there is no available state, waiting for state sync.
 	head := bc.CurrentBlock()
+	// 确保与块关联的状态可用，否则注销
+	// 如果没有可用状态，则等待状态同步。
 	if !bc.HasState(head.Root) {
+
 		if head.Number.Uint64() == 0 {
 			// The genesis state is missing, which is only possible in the path-based
 			// scheme. This situation occurs when the initial state sync is not finished
@@ -384,6 +395,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 		}
 	}
 	// Ensure that a previous crash in SetHead doesn't leave extra ancients
+	// 确保 SetHead 中之前的崩溃不会留下多余的遗迹
 	if frozen, err := bc.db.Ancients(); err == nil && frozen > 0 {
 		var (
 			needRewind bool
@@ -392,6 +404,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 		// The head full block may be rolled back to a very low height due to
 		// blockchain repair. If the head full block is even lower than the ancient
 		// chain, truncate the ancient store.
+		//由于区块链修复，头部满块可能会回滚到非常低的高度。如果头部满块甚至低于古链，则截断古链存储。
 		fullBlock := bc.CurrentBlock()
 		if fullBlock != nil && fullBlock.Hash() != bc.genesisBlock.Hash() && fullBlock.Number.Uint64() < frozen-1 {
 			needRewind = true
@@ -400,6 +413,9 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 		// In snap sync, it may happen that ancient data has been written to the
 		// ancient store, but the LastFastBlock has not been updated, truncate the
 		// extra data here.
+		//在快照同步中，可能会发生古老数据已经写入
+		// 古老存储，但 LastFastBlock 尚未更新的情况，请在此处截断
+		// 多余的数据。
 		snapBlock := bc.CurrentSnapBlock()
 		if snapBlock != nil && snapBlock.Number.Uint64() < frozen-1 {
 			needRewind = true
@@ -417,8 +433,10 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	// The first thing the node will do is reconstruct the verification data for
 	// the head block (ethash cache or clique voting snapshot). Might as well do
 	// it in advance.
+	// 节点要做的第一件事是重建头块（ethash 缓存或 clique 投票快照）的验证数据。最好提前做这件事。
 	bc.engine.VerifyHeader(bc, bc.CurrentHeader())
 
+	//新建一个logger
 	if bc.logger != nil && bc.logger.OnBlockchainInit != nil {
 		bc.logger.OnBlockchainInit(chainConfig)
 	}
@@ -436,6 +454,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	}
 
 	// Load any existing snapshot, regenerating it if loading failed
+	//如果限制快照大小 不是很懂？？？
 	if bc.cacheConfig.SnapshotLimit > 0 {
 		// If the chain was rewound past the snapshot persistent layer (causing
 		// a recovery block number to be persisted to disk), check if we're still
@@ -443,6 +462,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 		// head mismatch.
 		var recover bool
 
+		//我理解的如果处于恢复模式 就是还是同步之前的不要让快照无效
 		head := bc.CurrentBlock()
 		if layer := rawdb.ReadSnapshotRecoveryNumber(bc.db); layer != nil && *layer >= head.Number.Uint64() {
 			log.Warn("Enabling snapshot recovery", "chainhead", head.Number, "diskbase", *layer)
@@ -457,6 +477,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 		bc.snaps, _ = snapshot.New(snapconfig, bc.db, bc.triedb, head.Root)
 	}
 	// Rewind the chain in case of an incompatible config upgrade.
+	// 如果配置升级不兼容，则回溯链。
 	if compat, ok := genesisErr.(*params.ConfigCompatError); ok {
 		log.Warn("Rewinding chain to upgrade configuration", "err", compat)
 		if compat.RewindToTime > 0 {
@@ -468,6 +489,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	}
 
 	// Start tx indexer if it's enabled.
+	//如果已启用，则启动 tx 索引器。
 	if txLookupLimit != nil {
 		bc.txIndexer = newTxIndexer(*txLookupLimit, bc)
 	}
@@ -492,13 +514,17 @@ func (bc *BlockChain) empty() bool {
 // assumes that the chain manager mutex is held.
 func (bc *BlockChain) loadLastState() error {
 	// Restore the last known head block
+	//读取头块
 	head := rawdb.ReadHeadBlockHash(bc.db)
+	// 如果没查到 说明数据库有问题
 	if head == (common.Hash{}) {
 		// Corrupt or empty database, init from scratch
 		log.Warn("Empty database, resetting chain")
+		// 重置整个区块链 将其恢复到创世状态
 		return bc.Reset()
 	}
 	// Make sure the entire head block is available
+	// 确保头块可用
 	headBlock := bc.GetBlockByHash(head)
 	if headBlock == nil {
 		// Corrupt or empty database, init from scratch
@@ -506,20 +532,26 @@ func (bc *BlockChain) loadLastState() error {
 		return bc.Reset()
 	}
 	// Everything seems to be fine, set as the head block
+	//set 区块链的currentBlock
 	bc.currentBlock.Store(headBlock.Header())
+	// 重新设置块头指标
 	headBlockGauge.Update(int64(headBlock.NumberU64()))
 
 	// Restore the last known head header
+	// 恢复一个区块头
 	headHeader := headBlock.Header()
 	if head := rawdb.ReadHeadHeaderHash(bc.db); head != (common.Hash{}) {
 		if header := bc.GetHeaderByHash(head); header != nil {
 			headHeader = header
 		}
 	}
+	//重新set header进去
 	bc.hc.SetCurrentHeader(headHeader)
 
 	// Restore the last known head snap block
+	// 重置快照block
 	bc.currentSnapBlock.Store(headBlock.Header())
+	// 重新设置快照的指标
 	headFastBlockGauge.Update(int64(headBlock.NumberU64()))
 
 	if head := rawdb.ReadHeadFastBlockHash(bc.db); head != (common.Hash{}) {
@@ -532,6 +564,8 @@ func (bc *BlockChain) loadLastState() error {
 	// Restore the last known finalized block and safe block
 	// Note: the safe block is not stored on disk and it is set to the last
 	// known finalized block on startup
+	//恢复最后一个已知的最终确定块和安全块
+	//注意：安全块不存储在磁盘上，并在启动时设置为最后一个已知的最终确定块
 	if head := rawdb.ReadFinalizedBlockHash(bc.db); head != (common.Hash{}) {
 		if block := bc.GetBlockByHash(head); block != nil {
 			bc.currentFinalBlock.Store(block.Header())
@@ -541,6 +575,7 @@ func (bc *BlockChain) loadLastState() error {
 		}
 	}
 	// Issue a status log for the user
+	//发出状态日志
 	var (
 		currentSnapBlock  = bc.CurrentSnapBlock()
 		currentFinalBlock = bc.CurrentFinalBlock()
