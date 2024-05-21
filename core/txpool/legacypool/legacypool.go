@@ -288,16 +288,21 @@ func (pool *LegacyPool) Filter(tx *types.Transaction) bool {
 // head to allow balance / nonce checks. The transaction journal will be loaded
 // from disk and filtered based on the provided starting settings. The internal
 // goroutines will be spun up and the pool deemed operational afterwards.
+// Init 设置将交易保留在池中所需的 Gas 价格和链头以允许余额/随机数检查。
+// 交易日志将从磁盘加载并根据提供的启动设置进行过滤。内部 goroutine 将启动，之后池将被视为可运行。
 func (pool *LegacyPool) Init(gasTip uint64, head *types.Header, reserve txpool.AddressReserver) error {
 	// Set the address reserver to request exclusive access to pooled accounts
+	//设置默认的预定者
 	pool.reserve = reserve
 
 	// Set the basic pool parameters
+	// 设置基本池子参数
 	pool.gasTip.Store(uint256.NewInt(gasTip))
 
 	// Initialize the state with head block, or fallback to empty one in
 	// case the head state is not available (might occur when node is not
 	// fully synced).
+	//取出状态数据库  根据头hash如果取不出使用默认hash
 	statedb, err := pool.chain.StateAt(head.Root)
 	if err != nil {
 		statedb, err = pool.chain.StateAt(types.EmptyRootHash)
@@ -305,14 +310,21 @@ func (pool *LegacyPool) Init(gasTip uint64, head *types.Header, reserve txpool.A
 	if err != nil {
 		return err
 	}
+	//设置池子的头
 	pool.currentHead.Store(head)
+	//设置池子的状态数据库
 	pool.currentState = statedb
+	//挂起状态跟踪虚拟随机数
 	pool.pendingNonces = newNoncer(statedb)
 
 	// Start the reorg loop early, so it can handle requests generated during
 	// journal loading.
 	pool.wg.Add(1)
-	go pool.scheduleReorgLoop()
+
+	go func() {
+		defer pool.wg.Done()
+		pool.scheduleReorgLoop()
+	}()
 
 	// If local transactions and journaling is enabled, load from disk
 	if pool.journal != nil {
@@ -324,7 +336,11 @@ func (pool *LegacyPool) Init(gasTip uint64, head *types.Header, reserve txpool.A
 		}
 	}
 	pool.wg.Add(1)
-	go pool.loop()
+
+	go func() {
+		defer pool.wg.Done()
+		pool.loop()
+	}()
 	return nil
 }
 
@@ -332,7 +348,6 @@ func (pool *LegacyPool) Init(gasTip uint64, head *types.Header, reserve txpool.A
 // outside blockchain events as well as for various reporting and transaction
 // eviction events.
 func (pool *LegacyPool) loop() {
-	defer pool.wg.Done()
 
 	var (
 		prevPending, prevQueued, prevStales int
@@ -1188,7 +1203,6 @@ func (pool *LegacyPool) queueTxEvent(tx *types.Transaction) {
 // call those methods directly, but request them being run using requestReset and
 // requestPromoteExecutables instead.
 func (pool *LegacyPool) scheduleReorgLoop() {
-	defer pool.wg.Done()
 
 	var (
 		curDone       chan struct{} // non-nil while runReorg is active

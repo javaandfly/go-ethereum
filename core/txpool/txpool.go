@@ -93,6 +93,7 @@ func New(gasTip uint64, chain BlockChain, subpools []SubPool) (*TxPool, error) {
 		sync:         make(chan chan error),
 	}
 	for i, subpool := range subpools {
+		//执行所有的init函数 初始化所有的交易池
 		if err := subpool.Init(gasTip, head, pool.reserver(i, subpool)); err != nil {
 			for j := i - 1; j >= 0; j-- {
 				subpools[j].Close()
