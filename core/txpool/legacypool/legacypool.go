@@ -321,6 +321,7 @@ func (pool *LegacyPool) Init(gasTip uint64, head *types.Header, reserve txpool.A
 	// journal loading.
 	pool.wg.Add(1)
 
+	//我理解的是可以通过一些监控 改变池子的一些属性
 	go func() {
 		defer pool.wg.Done()
 		pool.scheduleReorgLoop()
@@ -337,6 +338,7 @@ func (pool *LegacyPool) Init(gasTip uint64, head *types.Header, reserve txpool.A
 	}
 	pool.wg.Add(1)
 
+	//开启一个协程序 循环是交易池的主要事件循环，等待外部区块链事件以及各种报告和交易驱逐事件并做出反应。
 	go func() {
 		defer pool.wg.Done()
 		pool.loop()
@@ -370,6 +372,7 @@ func (pool *LegacyPool) loop() {
 			return
 
 		// Handle stats reporting ticks
+		//处理统计报告刻度 处理上一个的状态？
 		case <-report.C:
 			pool.mu.RLock()
 			pending, queued := pool.stats()
@@ -382,17 +385,22 @@ func (pool *LegacyPool) loop() {
 			}
 
 		// Handle inactive account transaction eviction
+		//处理不活跃的账号
 		case <-evict.C:
 			pool.mu.Lock()
 			for addr := range pool.queue {
 				// Skip local transactions from the eviction mechanism
+				//应该是检查地址是否在使用 使用就先跳过
 				if pool.locals.contains(addr) {
 					continue
 				}
 				// Any non-locals old enough should be removed
+				//查询超时的地址然后从池子中删除
 				if time.Since(pool.beats[addr]) > pool.config.Lifetime {
+					//排序事务切片 以备在对内容进行任何修改之前再次请求时使用。
 					list := pool.queue[addr].Flatten()
 					for _, tx := range list {
+						//removeTx 从队列中删除单个事务，将所有后续事务移回未来队列。
 						pool.removeTx(tx.Hash(), true, true)
 					}
 					queuedEvictionMeter.Mark(int64(len(list)))
@@ -401,6 +409,7 @@ func (pool *LegacyPool) loop() {
 			pool.mu.Unlock()
 
 		// Handle local transaction journal rotation
+		//只是处理日志
 		case <-journal.C:
 			if pool.journal != nil {
 				pool.mu.Lock()
