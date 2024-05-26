@@ -492,6 +492,7 @@ func (srv *Server) Start() (err error) {
 	//如有必要，启动端口映射循环。注意：这需要在服务器上设置 LocalNode 实例后调用。
 	srv.setupPortMapping()
 
+	//下次从这里读取 tag:end-read
 	if srv.ListenAddr != "" {
 		if err := srv.setupListening(); err != nil {
 			return err
@@ -644,6 +645,7 @@ func (srv *Server) maxDialedConns() (limit int) {
 
 func (srv *Server) setupListening() error {
 	// Launch the listener.
+
 	listener, err := srv.listenFunc("tcp", srv.ListenAddr)
 	if err != nil {
 		return err
