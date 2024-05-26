@@ -187,6 +187,7 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	backend, eth := utils.RegisterEthService(stack, &cfg.Eth)
 
 	// Create gauge with geth system and build information
+	//使用 geth 系统创建仪表并构建信息
 	if eth != nil { // The 'eth' backend may be nil in light mode
 		var protos []string
 		for _, p := range eth.Protocols() {
@@ -201,17 +202,21 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	}
 
 	// Configure log filter RPC API.
+	//向节点添加eth日志过滤RPC API。
 	filterSystem := utils.RegisterFilterAPI(stack, backend, &cfg.Eth)
 
 	// Configure GraphQL if requested.
+	//如果需要，配置 GraphQL
 	if ctx.IsSet(utils.GraphQLEnabledFlag.Name) {
 		utils.RegisterGraphQLService(stack, backend, filterSystem, &cfg.Node)
 	}
 	// Add the Ethereum Stats daemon if requested.
+	//如果需要，添加以太坊统计守护进程。
 	if cfg.Ethstats.URL != "" {
 		utils.RegisterEthStatsService(stack, backend, cfg.Ethstats.URL)
 	}
 	// Configure full-sync tester service if requested
+	//如果需要。添加全节点同步的测试服务
 	if ctx.IsSet(utils.SyncTargetFlag.Name) {
 		hex := hexutil.MustDecode(ctx.String(utils.SyncTargetFlag.Name))
 		if len(hex) != common.HashLength {
@@ -219,7 +224,7 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 		}
 		utils.RegisterFullSyncTester(stack, eth, common.BytesToHash(hex))
 	}
-
+	//如果启动了开发模式
 	if ctx.IsSet(utils.DeveloperFlag.Name) {
 		// Start dev mode.
 		simBeacon, err := catalyst.NewSimulatedBeacon(ctx.Uint64(utils.DeveloperPeriodFlag.Name), eth)
@@ -228,7 +233,7 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 		}
 		catalyst.RegisterSimulatedBeaconAPIs(stack, simBeacon)
 		stack.RegisterLifecycle(simBeacon)
-	} else if ctx.IsSet(utils.BeaconApiFlag.Name) {
+	} else if ctx.IsSet(utils.BeaconApiFlag.Name) { //如果启动了blsync模式
 		// Start blsync mode.
 		srv := rpc.NewServer()
 		srv.RegisterName("engine", catalyst.NewConsensusAPI(eth))

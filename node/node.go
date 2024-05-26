@@ -181,6 +181,7 @@ func (n *Node) Start() error {
 	defer n.startStopLock.Unlock()
 
 	n.lock.Lock()
+	//应该是为了防止二次启动 所有先判断标志位是否已经被更改
 	switch n.state {
 	case runningState:
 		n.lock.Unlock()
@@ -189,8 +190,10 @@ func (n *Node) Start() error {
 		n.lock.Unlock()
 		return ErrNodeStopped
 	}
+	//在这里更改标志位
 	n.state = runningState
 	// open networking and RPC endpoints
+	//开放网络和rpc节点
 	err := n.openEndpoints()
 	lifecycles := make([]Lifecycle, len(n.lifecycles))
 	copy(lifecycles, n.lifecycles)
@@ -283,6 +286,7 @@ func (n *Node) doClose(errs []error) error {
 func (n *Node) openEndpoints() error {
 	// start networking endpoints
 	n.log.Info("Starting peer-to-peer node", "instance", n.server.Name)
+	//启动p2p节点
 	if err := n.server.Start(); err != nil {
 		return convertFileLockError(err)
 	}

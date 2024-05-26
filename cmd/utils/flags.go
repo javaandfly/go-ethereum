@@ -1934,6 +1934,7 @@ func RegisterEthService(stack *node.Node, cfg *ethconfig.Config) (ethapi.Backend
 	if err != nil {
 		Fatalf("Failed to register the Ethereum service: %v", err)
 	}
+	//在stack注册eth的api
 	stack.RegisterAPIs(tracers.APIs(backend.APIBackend))
 	return backend.APIBackend, backend
 }

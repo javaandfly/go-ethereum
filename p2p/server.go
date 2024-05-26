@@ -449,9 +449,11 @@ func (s *sharedUDPConn) Close() error {
 func (srv *Server) Start() (err error) {
 	srv.lock.Lock()
 	defer srv.lock.Unlock()
+	//标志位 正在启动  以太坊中都是使用修改标志位来保证只能执行一次
 	if srv.running {
 		return errors.New("server already running")
 	}
+	//更改标志位
 	srv.running = true
 	srv.log = srv.Logger
 	if srv.log == nil {
@@ -474,6 +476,7 @@ func (srv *Server) Start() (err error) {
 	if srv.listenFunc == nil {
 		srv.listenFunc = net.Listen
 	}
+	//初始化 所有channel
 	srv.quit = make(chan struct{})
 	srv.delpeer = make(chan peerDrop)
 	srv.checkpointPostHandshake = make(chan *conn)
@@ -482,10 +485,11 @@ func (srv *Server) Start() (err error) {
 	srv.removetrusted = make(chan *enode.Node)
 	srv.peerOp = make(chan peerOpFunc)
 	srv.peerOpDone = make(chan struct{})
-
+	//设置本地节点
 	if err := srv.setupLocalNode(); err != nil {
 		return err
 	}
+	//如有必要，启动端口映射循环。注意：这需要在服务器上设置 LocalNode 实例后调用。
 	srv.setupPortMapping()
 
 	if srv.ListenAddr != "" {
@@ -505,14 +509,19 @@ func (srv *Server) Start() (err error) {
 
 func (srv *Server) setupLocalNode() error {
 	// Create the devp2p handshake.
+	//应该是通过文件字节流生成公钥
 	pubkey := crypto.FromECDSAPub(&srv.PrivateKey.PublicKey)
+	//是协议握手的RLP结构
 	srv.ourHandshake = &protoHandshake{Version: baseProtocolVersion, Name: srv.Name, ID: pubkey[1:]}
+	//感觉只是注册协议的版本和名字
 	for _, p := range srv.Protocols {
 		srv.ourHandshake.Caps = append(srv.ourHandshake.Caps, p.cap())
 	}
+	//根据版本号排序
 	slices.SortFunc(srv.ourHandshake.Caps, Cap.Cmp)
 
 	// Create the local node.
+	//创建本地的node
 	db, err := enode.OpenDB(srv.NodeDatabase)
 	if err != nil {
 		return err

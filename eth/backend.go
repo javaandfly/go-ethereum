@@ -273,7 +273,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, err
 	}
 	// Permit the downloader to use the trie cache allowance during fast sync
-	//
+	//增加缓存限制
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit + cacheConfig.SnapshotLimit
 	if eth.handler, err = newHandler(&handlerConfig{
 		NodeID:         eth.p2pServer.Self().ID(),
@@ -288,22 +288,29 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}); err != nil {
 		return nil, err
 	}
-
+	//新增miner
 	eth.miner = miner.New(eth, config.Miner, eth.engine)
+	//SetExtra 设置用于初始化块额外字段的内容。 根据miner
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
-
+	//新增一个api后端
 	eth.APIBackend = &EthAPIBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, eth, nil}
+	//是否允许不受保护的交易 什么事保护的交易？
 	if eth.APIBackend.allowUnprotectedTxs {
 		log.Info("Unprotected transactions allowed")
 	}
+	//价格预言机
 	gpoParams := config.GPO
+	//如果不存在就设置默认的gas价格
 	if gpoParams.Default == nil {
 		gpoParams.Default = config.Miner.GasPrice
 	}
+	//返回一个新的gasprice预言机，它可以为新创建的交易推荐合适的gasprice。
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
 
 	// Setup DNS discovery iterators.
+	//设置dns
 	dnsclient := dnsdisc.NewClient(dnsdisc.Config{})
+	//新增两个迭代器
 	eth.ethDialCandidates, err = dnsclient.NewIterator(eth.config.EthDiscoveryURLs...)
 	if err != nil {
 		return nil, err
@@ -314,14 +321,19 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 
 	// Start the RPC service
+	//启动rpc服务
 	eth.netRPCService = ethapi.NewNetAPI(eth.p2pServer, networkID)
 
 	// Register the backend on the node
+	//注册 miner eth admin debug net 的api
 	stack.RegisterAPIs(eth.APIs())
+	//注册p2p的协议
 	stack.RegisterProtocols(eth.Protocols())
+	//注册eth的生命周期
 	stack.RegisterLifecycle(eth)
 
 	// Successful startup; push a marker and check previous unclean shutdowns.
+	//在节点启动时首先调用。它将： -将新的启动标记推送到数据库 -报告以前的不正常关闭
 	eth.shutdownTracker.MarkStartup()
 
 	return eth, nil

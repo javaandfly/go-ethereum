@@ -101,6 +101,7 @@ func New(gasTip uint64, chain BlockChain, subpools []SubPool) (*TxPool, error) {
 			return nil, err
 		}
 	}
+	//真正执行的 循环是交易池的主要事件循环，等待外部区块链事件以及各种报告和交易驱逐事件并做出反应。看不懂？？
 	go pool.loop(head, chain)
 	return pool, nil
 }
@@ -184,18 +185,22 @@ func (p *TxPool) loop(head *types.Header, chain BlockChain) {
 	defer close(p.term)
 
 	// Subscribe to chain head events to trigger subpool resets
+	//订阅头信息 如果监听到 就覆盖
 	var (
 		newHeadCh  = make(chan core.ChainHeadEvent)
 		newHeadSub = chain.SubscribeChainHeadEvent(newHeadCh)
 	)
+	//关闭通道
 	defer newHeadSub.Unsubscribe()
 
 	// Track the previous and current head to feed to an idle reset
+	//跟踪前一个和当前磁头以馈送到空闲重置？
 	var (
 		oldHead = head
 		newHead = oldHead
 	)
 	// Consume chain head events and start resets when none is running
+	//应该是设置链头事件然后
 	var (
 		resetBusy = make(chan struct{}, 1) // Allow 1 reset to run concurrently
 		resetDone = make(chan *types.Header)
@@ -241,6 +246,7 @@ func (p *TxPool) loop(head *types.Header, chain BlockChain) {
 			}
 		}
 		// Wait for the next chain head event or a previous reset finish
+		//等待下一个链头事件或上一个重置完成 只改变变量
 		select {
 		case event := <-newHeadCh:
 			// Chain moved forward, store the head for later consumption

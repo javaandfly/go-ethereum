@@ -349,10 +349,10 @@ func geth(ctx *cli.Context) error {
 	}
 	//注册一些指标，然后准备启动的一些参数，打印一些启动信息
 	prepare(ctx)
-	//真正启动一个重节点
+	//make一个重节点  初始化配置，对象，依赖，指标，协议，监听，数据库初始化等等
 	stack := makeFullNode(ctx)
 	defer stack.Close()
-
+	//启动这个节点
 	startNode(ctx, stack, false)
 	stack.Wait()
 	return nil
@@ -365,6 +365,7 @@ func startNode(ctx *cli.Context, stack *node.Node, isConsole bool) {
 	debug.Memsize.Add("node", stack)
 
 	// Start up the node itself
+	//启动节点
 	utils.StartNode(ctx, stack, isConsole)
 
 	// Unlock any account specifically requested

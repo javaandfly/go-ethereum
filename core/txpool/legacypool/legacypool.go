@@ -338,7 +338,7 @@ func (pool *LegacyPool) Init(gasTip uint64, head *types.Header, reserve txpool.A
 	}
 	pool.wg.Add(1)
 
-	//开启一个协程序 循环是交易池的主要事件循环，等待外部区块链事件以及各种报告和交易驱逐事件并做出反应。
+	//开启一个协程 循环是交易池的主要事件循环，等待外部区块链事件以及各种报告和交易驱逐事件并做出反应。
 	go func() {
 		defer pool.wg.Done()
 		pool.loop()

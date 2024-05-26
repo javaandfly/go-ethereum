@@ -75,6 +75,7 @@ func Fatalf(format string, args ...interface{}) {
 }
 
 func StartNode(ctx *cli.Context, stack *node.Node, isConsole bool) {
+	//Start 启动所有已注册的生命周期、RPC 服务和 p2p 网络。节点只能启动一次。
 	if err := stack.Start(); err != nil {
 		Fatalf("Error starting protocol stack: %v", err)
 	}
