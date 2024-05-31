@@ -492,15 +492,17 @@ func (srv *Server) Start() (err error) {
 	//如有必要，启动端口映射循环。注意：这需要在服务器上设置 LocalNode 实例后调用。
 	srv.setupPortMapping()
 
-	//下次从这里读取 tag:end-read
+	//set p2p的监听端口 并开启协程监听
 	if srv.ListenAddr != "" {
 		if err := srv.setupListening(); err != nil {
 			return err
 		}
 	}
+	// 注册一些东西 将node节点的协议注入srv
 	if err := srv.setupDiscovery(); err != nil {
 		return err
 	}
+	// 设置调度程序
 	srv.setupDialScheduler()
 
 	srv.loopWG.Add(1)
@@ -603,6 +605,7 @@ func (srv *Server) setupDiscovery() error {
 }
 
 func (srv *Server) setupDialScheduler() {
+
 	config := dialConfig{
 		self:           srv.localnode.ID(),
 		maxDialPeers:   srv.maxDialedConns(),
@@ -618,6 +621,8 @@ func (srv *Server) setupDialScheduler() {
 	if config.dialer == nil {
 		config.dialer = tcpDialer{&net.Dialer{Timeout: defaultDialTimeout}}
 	}
+
+	//新增调度程序
 	srv.dialsched = newDialScheduler(config, srv.discmix, srv.SetupConn)
 	for _, n := range srv.StaticNodes {
 		srv.dialsched.addStatic(n)

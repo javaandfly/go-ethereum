@@ -160,6 +160,7 @@ func (cfg dialConfig) withDefaults() dialConfig {
 }
 
 func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupFunc) *dialScheduler {
+	//设置dial的配置
 	cfg := config.withDefaults()
 	d := &dialScheduler{
 		dialConfig:   cfg,
@@ -178,7 +179,9 @@ func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupF
 	d.lastStatsLog = d.clock.Now()
 	d.ctx, d.cancel = context.WithCancel(context.Background())
 	d.wg.Add(2)
+	//监听两个nodesin
 	go d.readNodes(it)
+
 	go d.loop(it)
 	return d
 }
@@ -230,6 +233,7 @@ func (d *dialScheduler) loop(it enode.Iterator) {
 loop:
 	for {
 		// Launch new dials if slots are available.
+		// 启用新的表盘
 		slots := d.freeDialSlots()
 		slots -= d.startStaticDials(slots)
 		if slots > 0 {
