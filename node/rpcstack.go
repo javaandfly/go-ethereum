@@ -139,6 +139,7 @@ func (h *httpServer) start() error {
 	}
 
 	// Initialize the server.
+	//初始化 server 设置一些配置
 	h.server = &http.Server{Handler: h}
 	if h.timeouts != (rpc.HTTPTimeouts{}) {
 		CheckTimeouts(&h.timeouts)
@@ -149,6 +150,7 @@ func (h *httpServer) start() error {
 	}
 
 	// Start the server.
+	// 监听端口
 	listener, err := net.Listen("tcp", h.endpoint)
 	if err != nil {
 		// If the server fails to start, we need to clear out the RPC and WS
@@ -158,6 +160,7 @@ func (h *httpServer) start() error {
 		return err
 	}
 	h.listener = listener
+	//开启一个协程 根据监听的端口 把服务跑起来 http
 	go h.server.Serve(listener)
 
 	if h.wsAllowed() {

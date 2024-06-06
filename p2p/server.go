@@ -506,6 +506,7 @@ func (srv *Server) Start() (err error) {
 	srv.setupDialScheduler()
 
 	srv.loopWG.Add(1)
+	//启动p2p节点 主要是与对等方
 	go srv.run()
 	return nil
 }
@@ -730,6 +731,7 @@ func (srv *Server) run() {
 	)
 	// Put trusted nodes into a map to speed up checks.
 	// Trusted peers are loaded on startup or added via AddTrustedPeer RPC.
+	//设置一个状态集合 初始状态为激活态
 	for _, n := range srv.TrustedNodes {
 		trusted[n.ID()] = true
 	}
@@ -737,50 +739,60 @@ func (srv *Server) run() {
 running:
 	for {
 		select {
-		case <-srv.quit:
+
+		case <-srv.quit: //退出信号
 			// The server was stopped. Run the cleanup logic.
 			break running
 
-		case n := <-srv.addtrusted:
+		case n := <-srv.addtrusted: //新增状态并且激活
 			// This channel is used by AddTrustedPeer to add a node
 			// to the trusted node set.
 			srv.log.Trace("Adding trusted node", "node", n)
 			trusted[n.ID()] = true
+			//建立握手
 			if p, ok := peers[n.ID()]; ok {
 				p.rw.set(trustedConn, true)
 			}
 
-		case n := <-srv.removetrusted:
+		case n := <-srv.removetrusted: //移除状态 并且设置状态为false
 			// This channel is used by RemoveTrustedPeer to remove a node
 			// from the trusted node set.
 			srv.log.Trace("Removing trusted node", "node", n)
 			delete(trusted, n.ID())
+			//移除握手
 			if p, ok := peers[n.ID()]; ok {
 				p.rw.set(trustedConn, false)
 			}
 
 		case op := <-srv.peerOp:
 			// This channel is used by Peers and PeerCount.
+			//该通道由 Peers 和 PeerCount 使用
 			op(peers)
 			srv.peerOpDone <- struct{}{}
 
-		case c := <-srv.checkpointPostHandshake:
+		case c := <-srv.checkpointPostHandshake: //检查握手状态
 			// A connection has passed the encryption handshake so
 			// the remote identity is known (but hasn't been verified yet).
+			//如果已经知道远程身份 已经握手 但是还未验证
 			if trusted[c.node.ID()] {
 				// Ensure that the trusted flag is set before checking against MaxPeers.
 				c.flags |= trustedConn
 			}
 			// TODO: track in-progress inbound node IDs (pre-Peer) to avoid dialing them.
+			//检查当前状态 包括已经握手 节点数量过多等 与验证身份有关
 			c.cont <- srv.postHandshakeChecks(peers, inboundCount, c)
 
-		case c := <-srv.checkpointAddPeer:
+		case c := <-srv.checkpointAddPeer: //检查并且添加对等节点
 			// At this point the connection is past the protocol handshake.
 			// Its capabilities are known and the remote identity is verified.
+			//节点已经通过协议握手 并且通过验证
 			err := srv.addPeerChecks(peers, inboundCount, c)
 			if err == nil {
 				// The handshakes are done and it passed all checks.
+				//握手已经通过所有检查
+				//启动节点 只有监听读和心跳检测 重点
 				p := srv.launchPeer(c)
+				// 注册新节点
 				peers[c.node.ID()] = p
 				srv.log.Debug("Adding p2p peer", "peercount", len(peers), "id", p.ID(), "conn", c.flags, "addr", p.RemoteAddr(), "name", p.Name())
 				srv.dialsched.peerAdded(c)
@@ -796,7 +808,7 @@ running:
 			}
 			c.cont <- err
 
-		case pd := <-srv.delpeer:
+		case pd := <-srv.delpeer: //对等端断开连接
 			// A peer disconnected.
 			d := common.PrettyDuration(mclock.Now() - pd.created)
 			delete(peers, pd.ID())
@@ -811,7 +823,7 @@ running:
 			activePeerGauge.Dec(1)
 		}
 	}
-
+	//p2p网络关闭
 	srv.log.Trace("P2P networking is spinning down")
 
 	// Terminate discovery. If there is a running lookup it will terminate soon.
@@ -822,6 +834,7 @@ running:
 		srv.DiscV5.Close()
 	}
 	// Disconnect all peers.
+	//离开前释放所有对等节点
 	for _, p := range peers {
 		p.Disconnect(DiscQuitting)
 	}
@@ -852,11 +865,13 @@ func (srv *Server) postHandshakeChecks(peers map[enode.ID]*Peer, inboundCount in
 
 func (srv *Server) addPeerChecks(peers map[enode.ID]*Peer, inboundCount int, c *conn) error {
 	// Drop connections with no matching protocols.
+	//丢弃没有匹配协议的连接
 	if len(srv.Protocols) > 0 && countMatchingProtocols(srv.Protocols, c.caps) == 0 {
 		return DiscUselessPeer
 	}
 	// Repeat the post-handshake checks because the
 	// peer set might have changed since those checks were performed.
+	//继续检查对等节点
 	return srv.postHandshakeChecks(peers, inboundCount, c)
 }
 
@@ -1047,12 +1062,15 @@ func (srv *Server) checkpoint(c *conn, stage chan<- *conn) error {
 }
 
 func (srv *Server) launchPeer(c *conn) *Peer {
+
+	//新增节点初始化配置
 	p := newPeer(srv.log, c, srv.Protocols)
 	if srv.EnableMsgEvents {
 		// If message events are enabled, pass the peerFeed
 		// to the peer.
 		p.events = &srv.peerFeed
 	}
+	//启动节点
 	go srv.runPeer(p)
 	return p
 }
@@ -1062,6 +1080,7 @@ func (srv *Server) runPeer(p *Peer) {
 	if srv.newPeerHook != nil {
 		srv.newPeerHook(p)
 	}
+	//发送事件
 	srv.peerFeed.Send(&PeerEvent{
 		Type:          PeerEventTypeAdd,
 		Peer:          p.ID(),
@@ -1070,6 +1089,7 @@ func (srv *Server) runPeer(p *Peer) {
 	})
 
 	// Run the per-peer main loop.
+	//新增读取监听 和 心跳检测
 	remoteRequested, err := p.run()
 
 	// Announce disconnect on the main loop to update the peer set.
@@ -1081,6 +1101,7 @@ func (srv *Server) runPeer(p *Peer) {
 	// after the send to delpeer so subscribers have a consistent view of
 	// the peer set (i.e. Server.Peers() doesn't include the peer when the
 	// event is received).
+	//发送事件
 	srv.peerFeed.Send(&PeerEvent{
 		Type:          PeerEventTypeDrop,
 		Peer:          p.ID(),

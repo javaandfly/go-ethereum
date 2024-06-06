@@ -291,6 +291,7 @@ func (n *Node) openEndpoints() error {
 		return convertFileLockError(err)
 	}
 	// start RPC endpoints
+	//启动rpc节点
 	err := n.startRPC()
 	if err != nil {
 		n.stopRPC()
@@ -395,6 +396,7 @@ func (n *Node) obtainJWTSecret(cliParam string) ([]byte, error) {
 // assumptions about the state of the node.
 func (n *Node) startRPC() error {
 	// Filter out personal api
+	//过滤掉个人的api
 	var apis []rpc.API
 	for _, api := range n.rpcAPIs {
 		if api.Namespace == "personal" {
@@ -406,11 +408,22 @@ func (n *Node) startRPC() error {
 		}
 		apis = append(apis, api)
 	}
+	//注册所有rpc
 	if err := n.startInProc(apis); err != nil {
 		return err
 	}
 
+	//当前合约调用有三种方式
+	//普通rpc方式
+	//IPC方式
+	//WebSocket的方式
+
 	// Configure IPC.
+	// 通常是通过控制台的方式
+	// 以太网的节点在运行之后，可以打开一个控制台
+	// 在控制台里面呢通过输入命令的方式，可以来调取一些智能合约的方法
+	// IPC的方式也成为管道通信
+	// 主要是进程之间的一个调用方式
 	if n.ipc.endpoint != "" {
 		if err := n.ipc.start(apis); err != nil {
 			return err
@@ -425,11 +438,13 @@ func (n *Node) startRPC() error {
 		batchItemLimit:         n.config.BatchRequestLimit,
 		batchResponseSizeLimit: n.config.BatchResponseMaxSize,
 	}
-
+	//定义初始化http函数
 	initHttp := func(server *httpServer, port int) error {
+		//设置监听端口
 		if err := server.setListenAddr(n.config.HTTPHost, port); err != nil {
 			return err
 		}
+		//启动rpc服务
 		if err := server.enableRPC(openAPIs, httpConfig{
 			CorsAllowedOrigins: n.config.HTTPCors,
 			Vhosts:             n.config.HTTPVirtualHosts,
@@ -442,7 +457,7 @@ func (n *Node) startRPC() error {
 		servers = append(servers, server)
 		return nil
 	}
-
+	//定义初始化webSocket
 	initWS := func(port int) error {
 		server := n.wsServerForPort(port, false)
 		if err := server.setListenAddr(n.config.WSHost, port); err != nil {
@@ -459,7 +474,7 @@ func (n *Node) startRPC() error {
 		servers = append(servers, server)
 		return nil
 	}
-
+	//初始化权限
 	initAuth := func(port int, secret []byte) error {
 		// Enable auth via HTTP
 		server := n.httpAuth
@@ -502,6 +517,7 @@ func (n *Node) startRPC() error {
 	}
 
 	// Set up HTTP.
+	//初始化Http
 	if n.config.HTTPHost != "" {
 		// Configure legacy unauthenticated HTTP.
 		if err := initHttp(n.http, n.config.HTTPPort); err != nil {
@@ -509,6 +525,7 @@ func (n *Node) startRPC() error {
 		}
 	}
 	// Configure WebSocket.
+	//初始化WebSocket
 	if n.config.WSHost != "" {
 		// legacy unauthenticated
 		if err := initWS(n.config.WSPort); err != nil {
@@ -516,6 +533,7 @@ func (n *Node) startRPC() error {
 		}
 	}
 	// Configure authenticated API
+	//初始化身份验证设计令牌
 	if len(openAPIs) != len(allAPIs) {
 		jwtSecret, err := n.obtainJWTSecret(n.config.JWTSecret)
 		if err != nil {

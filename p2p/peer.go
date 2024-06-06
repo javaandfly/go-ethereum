@@ -252,16 +252,20 @@ func (p *Peer) run() (remoteRequested bool, err error) {
 		reason     DiscReason // sent to the peer
 	)
 	p.wg.Add(2)
+	//读循环
 	go p.readLoop(readErr)
+	//心跳检测
 	go p.pingLoop()
 
 	// Start all protocol handlers.
 	writeStart <- struct{}{}
+	//启动所有协议处理器
 	p.startProtocols(writeStart, writeErr)
 
 	// Wait for an error or disconnect.
 loop:
 	for {
+		//监控错误
 		select {
 		case err = <-writeErr:
 			// A write finished. Allow the next write to start if
