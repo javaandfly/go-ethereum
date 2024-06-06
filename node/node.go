@@ -544,6 +544,7 @@ func (n *Node) startRPC() error {
 		}
 	}
 	// Start the servers
+	//开启所有服务
 	for _, server := range servers {
 		if err := server.start(); err != nil {
 			return err
