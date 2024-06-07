@@ -718,6 +718,7 @@ func (srv *Server) doPeerOp(fn peerOpFunc) {
 
 // run is the main loop of the server.
 func (srv *Server) run() {
+	// 开始启动p2p网络
 	srv.log.Info("Started P2P networking", "self", srv.localnode.Node().URLv4())
 	defer srv.loopWG.Done()
 	defer srv.nodedb.Close()
@@ -731,7 +732,8 @@ func (srv *Server) run() {
 	)
 	// Put trusted nodes into a map to speed up checks.
 	// Trusted peers are loaded on startup or added via AddTrustedPeer RPC.
-	//设置一个状态集合 初始状态为激活态
+	//将受信任节点放入地图中以加快检查速度。
+	//受信任的对等体在启动时加载或通过 AddTrustedPeer RPC 添加。
 	for _, n := range srv.TrustedNodes {
 		trusted[n.ID()] = true
 	}
@@ -747,6 +749,7 @@ running:
 		case n := <-srv.addtrusted: //新增状态并且激活
 			// This channel is used by AddTrustedPeer to add a node
 			// to the trusted node set.
+			// 应该类似于启动的形式 更改启动标识为，当前不存在则添加
 			srv.log.Trace("Adding trusted node", "node", n)
 			trusted[n.ID()] = true
 			//建立握手
@@ -757,6 +760,7 @@ running:
 		case n := <-srv.removetrusted: //移除状态 并且设置状态为false
 			// This channel is used by RemoveTrustedPeer to remove a node
 			// from the trusted node set.
+			//关闭节点并删除
 			srv.log.Trace("Removing trusted node", "node", n)
 			delete(trusted, n.ID())
 			//移除握手
