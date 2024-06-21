@@ -205,6 +205,7 @@ func (n *Node) Start() error {
 		return err
 	}
 	// Start all registered lifecycles.
+	// 开启所有注册的生命周期
 	var started []Lifecycle
 	for _, lifecycle := range lifecycles {
 		if err = lifecycle.Start(); err != nil {

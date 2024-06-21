@@ -162,7 +162,7 @@ func (h *httpServer) start() error {
 	h.listener = listener
 	//开启一个协程 根据监听的端口 把服务跑起来 http
 	go h.server.Serve(listener)
-
+	//是否启动了websocket
 	if h.wsAllowed() {
 		url := fmt.Sprintf("ws://%v", listener.Addr())
 		if h.wsConfig.prefix != "" {
@@ -171,10 +171,12 @@ func (h *httpServer) start() error {
 		h.log.Info("WebSocket enabled", "url", url)
 	}
 	// if server is websocket only, return after logging
+	//是否开启了JSON-RPC 如果没有开启返回
 	if !h.rpcAllowed() {
 		return nil
 	}
 	// Log http endpoint.
+	//打印端口信息
 	h.log.Info("HTTP server started",
 		"endpoint", listener.Addr(), "auth", (h.httpConfig.jwtSecret != nil),
 		"prefix", h.httpConfig.prefix,
@@ -183,6 +185,7 @@ func (h *httpServer) start() error {
 	)
 
 	// Log all handlers mounted on server.
+	//记录服务器上安装的所有处理程序。
 	var paths []string
 	for path := range h.handlerNames {
 		paths = append(paths, path)

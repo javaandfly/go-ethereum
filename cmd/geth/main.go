@@ -354,6 +354,7 @@ func geth(ctx *cli.Context) error {
 	defer stack.Close()
 	//启动这个节点
 	startNode(ctx, stack, false)
+	//监控终止信号
 	stack.Wait()
 	return nil
 }
@@ -369,24 +370,29 @@ func startNode(ctx *cli.Context, stack *node.Node, isConsole bool) {
 	utils.StartNode(ctx, stack, isConsole)
 
 	// Unlock any account specifically requested
+	//解锁所有特别请求的账户
 	unlockAccounts(ctx, stack)
 
 	// Register wallet event handlers to open and auto-derive wallets
+	// 注册钱包事件处理程序以打开和自动派生钱包
 	events := make(chan accounts.WalletEvent, 16)
 	stack.AccountManager().Subscribe(events)
 
 	// Create a client to interact with local geth node.
+	//创建一个客户端来与本地 geth 节点交互。
 	rpcClient := stack.Attach()
 	ethClient := ethclient.NewClient(rpcClient)
 
 	go func() {
 		// Open any wallets already attached
+		//打开所有钱包
 		for _, wallet := range stack.AccountManager().Wallets() {
 			if err := wallet.Open(""); err != nil {
 				log.Warn("Failed to open wallet", "url", wallet.URL(), "err", err)
 			}
 		}
 		// Listen for wallet event till termination
+		// 监听钱包事件
 		for event := range events {
 			switch event.Kind {
 			case accounts.WalletArrived:
@@ -414,6 +420,8 @@ func startNode(ctx *cli.Context, stack *node.Node, isConsole bool) {
 
 	// Spawn a standalone goroutine for status synchronization monitoring,
 	// close the node when synchronization is complete if user required.
+	//生成一个独立的 goroutine 来监控状态同步，
+	// 如果用户需要，则在同步完成后关闭节点。
 	if ctx.Bool(utils.ExitWhenSyncedFlag.Name) {
 		go func() {
 			sub := stack.EventMux().Subscribe(downloader.DoneEvent{})

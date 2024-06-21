@@ -79,6 +79,7 @@ func StartNode(ctx *cli.Context, stack *node.Node, isConsole bool) {
 	if err := stack.Start(); err != nil {
 		Fatalf("Error starting protocol stack: %v", err)
 	}
+	//监听停止信号
 	go func() {
 		sigc := make(chan os.Signal, 1)
 		signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
